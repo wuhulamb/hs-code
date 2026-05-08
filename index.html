@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HS 海关编码浏览器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .container { text-align: center; }
+  h1 { font-size: 28px; color: #1a1a2e; margin-bottom: 8px; }
+  .subtitle { color: #888; margin-bottom: 32px; font-size: 14px; }
+  .grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .card { display: block; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 28px 36px; text-decoration: none; transition: transform 0.15s, box-shadow 0.15s; min-width: 160px; }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+  .card .version { font-size: 22px; font-weight: 700; color: #1565c0; }
+  .card .desc { font-size: 13px; color: #888; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>HS 海关编码浏览器</h1>
+  <p class="subtitle">选择要浏览的协调制度版本</p>
+  <div class="grid" id="versionGrid"></div>
+</div>
+
+<script>
+const editions = [
+  { id: 'hs1992', label: 'HS1992', desc: '1992 年版' },
+  { id: 'hs1996', label: 'HS1996', desc: '1996 年版' },
+  { id: 'hs2002', label: 'HS2002', desc: '2002 年版' },
+  { id: 'hs2007', label: 'HS2007', desc: '2007 年版' },
+  { id: 'hs2012', label: 'HS2012', desc: '2012 年版' },
+  { id: 'hs2017', label: 'HS2017', desc: '2017 年版' },
+  { id: 'hs2022', label: 'HS2022', desc: '2022 年版' },
+];
+
+function buildGrid() {
+  const grid = document.getElementById('versionGrid');
+  // 固定显示已知版本，后续可自动检测
+  editions.forEach(ed => {
+    const a = document.createElement('a');
+    a.className = 'card';
+    a.href = `viewer.html?edition=${ed.id}`;
+    a.innerHTML = `<div class="version">${ed.label}</div><div class="desc">${ed.desc}</div>`;
+    grid.appendChild(a);
+  });
+}
+buildGrid();
+</script>
+</body>
+</html>

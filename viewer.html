@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">HS 海关编码浏览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+  .header { background: #1a1a2e; color: #fff; padding: 16px 24px; position: sticky; top: 0; z-index: 100; }
+  .header h1 { font-size: 20px; display: inline; }
+  .header .stats { font-size: 13px; color: #aaa; margin-left: 16px; }
+  .header .back-link { font-size: 13px; color: #4fc3f7; text-decoration: none; margin-left: 16px; }
+  .header .back-link:hover { text-decoration: underline; }
+  .search-bar { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .search-bar input { flex: 1; min-width: 200px; max-width: 400px; padding: 8px 12px; border: 1px solid #444; border-radius: 6px; background: #16213e; color: #fff; font-size: 14px; outline: none; }
+  .search-bar input:focus { border-color: #4fc3f7; }
+  .search-bar input::placeholder { color: #777; }
+  .search-bar .count { font-size: 13px; color: #aaa; align-self: center; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  .tree { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+  .node { border-bottom: 1px solid #f0f0f0; }
+  .node:last-child { border-bottom: none; }
+  .node-content { display: flex; align-items: center; padding: 6px 12px; cursor: pointer; transition: background 0.15s; gap: 8px; }
+  .node-content:hover { background: #f0f7ff; }
+  .node-content .toggle { width: 20px; flex-shrink: 0; text-align: center; color: #999; font-size: 12px; user-select: none; }
+  .node-content .code { font-family: "SF Mono", "Cascadia Code", "Consolas", monospace; font-weight: 600; color: #1565c0; min-width: 80px; font-size: 13px; }
+  .node-content .desc { font-size: 14px; color: #333; flex: 1; }
+  .node-content .leaf-badge { font-size: 11px; color: #fff; background: #43a047; border-radius: 10px; padding: 1px 8px; flex-shrink: 0; }
+  .node-content .unit-badge { font-size: 11px; color: #666; background: #e8e8e8; border-radius: 10px; padding: 1px 8px; flex-shrink: 0; }
+  .children { display: none; }
+  .children.open { display: block; }
+  .level-0 > .node-content { background: #1a1a2e; color: #fff; padding: 10px 16px; }
+  .level-0 > .node-content .toggle { color: #fff; }
+  .level-0 > .node-content .code { color: #4fc3f7; }
+  .level-0 > .node-content .desc { color: #fff; font-weight: 600; }
+  .level-2 > .node-content { padding-left: 28px; border-left: 3px solid #1565c0; background: #f8faff; }
+  .level-2 > .node-content .code { color: #0d47a1; font-size: 14px; }
+  .level-4 > .node-content { padding-left: 56px; border-left: 3px solid #66bb6a; }
+  .level-6 > .node-content { padding-left: 84px; border-left: 3px solid #ffa726; }
+  .highlight { background: #fff8e1 !important; }
+  .highlight > .node-content { background: #fff8e1 !important; }
+  .empty-search { text-align: center; padding: 40px; color: #999; font-size: 15px; display: none; }
+  .expand-all-btn { background: transparent; border: 1px solid #444; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .expand-all-btn:hover { background: #333; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1 id="title">HS 海关编码</h1>
+  <a class="back-link" href="index.html">&larr; 切换版本</a>
+  <span class="stats" id="stats"></span>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="搜索编码或描述...">
+    <span class="count" id="resultCount"></span>
+    <button class="expand-all-btn" id="expandAllBtn">展开全部</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tree" id="treeRoot"></div>
+  <div class="empty-search" id="emptySearch">未找到匹配结果</div>
+</div>
+
+<script>
+// 从 URL 参数读取版本
+const params = new URLSearchParams(location.search);
+const edition = params.get('edition');
+document.getElementById('title').textContent = edition.toUpperCase() + ' 海关编码';
+document.getElementById('pageTitle').textContent = edition.toUpperCase() + ' 海关编码浏览';
+
+// 动态加载对应版本的数据文件
+const dataScript = document.createElement('script');
+dataScript.src = edition + '-data.js';
+dataScript.onload = initViewer;
+dataScript.onerror = function() {
+  document.getElementById('treeRoot').innerHTML =
+    '<p style="padding:20px;color:#999;">错误：未找到 ' + edition + ' 的数据文件</p>';
+};
+document.body.appendChild(dataScript);
+
+function initViewer() {
+  const DATA_VAR = edition.toUpperCase().replace(/-/g, '_') + '_DATA';
+  const data = window[DATA_VAR];
+  if (!data) {
+    document.getElementById('treeRoot').innerHTML =
+      '<p style="padding:20px;color:#999;">错误：数据加载失败</p>';
+    return;
+  }
+
+  const CHILDREN_MAP = {};
+  const NODE_MAP = {};
+
+  function buildTree(data) {
+    for (const item of data) {
+      NODE_MAP[item.id] = item;
+      if (!CHILDREN_MAP[item.parent]) CHILDREN_MAP[item.parent] = [];
+      CHILDREN_MAP[item.parent].push(item);
+    }
+    for (const p in CHILDREN_MAP) {
+      CHILDREN_MAP[p].sort((a, b) => a.id.localeCompare(b.id));
+    }
+    return CHILDREN_MAP['#'][0];
+  }
+
+  function createNodeDOM(item) {
+    const wrapper = document.createElement('div');
+    wrapper.className = `node level-${item.aggrlevel}`;
+    wrapper.dataset.id = item.id;
+
+    const content = document.createElement('div');
+    content.className = 'node-content';
+
+    const hasChildren = CHILDREN_MAP[item.id] && CHILDREN_MAP[item.id].length > 0;
+
+    const toggle = document.createElement('span');
+    toggle.className = 'toggle';
+    toggle.textContent = hasChildren ? '▶' : '';
+    content.appendChild(toggle);
+
+    const code = document.createElement('span');
+    code.className = 'code';
+    code.textContent = item.id;
+    content.appendChild(code);
+
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    let descText = item.text;
+    if (descText.startsWith(item.id)) {
+      descText = descText.substring(item.id.length).replace(/^[\s-]+/, '');
+    }
+    desc.textContent = descText;
+    content.appendChild(desc);
+
+    if (item.isLeaf === '1') {
+      const unit = document.createElement('span');
+      unit.className = 'unit-badge';
+      unit.textContent = item.standardUnitAbbr || 'u';
+      content.appendChild(unit);
+
+      const badge = document.createElement('span');
+      badge.className = 'leaf-badge';
+      badge.textContent = '叶';
+      content.appendChild(badge);
+    } else if (hasChildren) {
+      const cnt = document.createElement('span');
+      cnt.className = 'unit-badge';
+      cnt.textContent = `${CHILDREN_MAP[item.id].length} 子项`;
+      content.appendChild(cnt);
+    }
+
+    wrapper.appendChild(content);
+
+    if (hasChildren) {
+      const childrenDiv = document.createElement('div');
+      childrenDiv.className = 'children';
+      for (const child of CHILDREN_MAP[item.id]) {
+        childrenDiv.appendChild(createNodeDOM(child));
+      }
+      wrapper.appendChild(childrenDiv);
+
+      content.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = childrenDiv.classList.toggle('open');
+        toggle.textContent = isOpen ? '▼' : '▶';
+      });
+    }
+
+    return wrapper;
+  }
+
+  function expandAll(root) {
+    root.querySelectorAll('.children').forEach(el => el.classList.add('open'));
+    root.querySelectorAll('.toggle').forEach(el => {
+      if (el.textContent === '▶') el.textContent = '▼';
+    });
+  }
+
+  function collapseAll(root) {
+    root.querySelectorAll('.children').forEach(el => el.classList.remove('open'));
+    root.querySelectorAll('.toggle').forEach(el => {
+      if (el.textContent === '▼') el.textContent = '▶';
+    });
+  }
+
+  function filterTree(root, query) {
+    const q = query.toLowerCase().trim();
+    const allNodes = root.querySelectorAll('.node');
+    const emptyMsg = document.getElementById('emptySearch');
+    let matchCount = 0;
+
+    allNodes.forEach(node => {
+      const code = node.querySelector('.code').textContent.toLowerCase();
+      const desc = node.querySelector('.desc').textContent.toLowerCase();
+      const matches = !q || code.includes(q) || desc.includes(q);
+
+      if (!q) {
+        node.style.display = '';
+        node.classList.remove('highlight');
+        const children = node.querySelector('.children');
+        if (children) children.classList.remove('open');
+        return;
+      }
+
+      if (matches) {
+        node.style.display = '';
+        node.classList.add('highlight');
+        matchCount++;
+        let parent = node.parentElement.closest('.node');
+        while (parent) {
+          const pc = parent.querySelector('.children');
+          if (pc && !pc.classList.contains('open')) {
+            pc.classList.add('open');
+            const t = parent.querySelector('.toggle');
+            if (t) t.textContent = '▼';
+          }
+          parent = parent.parentElement.closest('.node');
+        }
+      } else {
+        node.style.display = 'none';
+        node.classList.remove('highlight');
+      }
+    });
+
+    document.getElementById('resultCount').textContent = q ? `找到 ${matchCount} 项` : '';
+    emptyMsg.style.display = (q && matchCount === 0) ? 'block' : 'none';
+  }
+
+  // ========== Bootstrap ==========
+  const rootItem = buildTree(data);
+  const treeRoot = document.getElementById('treeRoot');
+  const rootDOM = createNodeDOM(rootItem);
+  const rootChildren = rootDOM.querySelector('.children');
+  if (rootChildren) {
+    rootChildren.classList.add('open');
+    rootDOM.querySelector('.toggle').textContent = '▼';
+  }
+  treeRoot.appendChild(rootDOM);
+
+  const totalItems = data.length;
+  const leafItems = data.filter(i => i.isLeaf === '1').length;
+  document.getElementById('stats').textContent = `共 ${totalItems} 项 (${leafItems} 个叶子节点)`;
+
+  // Search with debounce
+  const searchInput = document.getElementById('searchInput');
+  let searchTimer;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => filterTree(rootDOM, searchInput.value), 200);
+  });
+
+  // Expand/Collapse all toggle
+  let allExpanded = false;
+  document.getElementById('expandAllBtn').addEventListener('click', () => {
+    if (allExpanded) {
+      collapseAll(rootDOM);
+      document.getElementById('expandAllBtn').textContent = '展开全部';
+    } else {
+      expandAll(rootDOM);
+      document.getElementById('expandAllBtn').textContent = '收起全部';
+    }
+    allExpanded = !allExpanded;
+  });
+}
+</script>
+</body>
+</html>
