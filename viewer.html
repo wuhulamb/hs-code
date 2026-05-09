@@ -209,6 +209,7 @@ function initViewer() {
         matchCount++;
         let parent = node.parentElement.closest('.node');
         while (parent) {
+          parent.style.display = '';
           const pc = parent.querySelector('.children');
           if (pc && !pc.classList.contains('open')) {
             pc.classList.add('open');
